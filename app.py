@@ -13,8 +13,79 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(
     page_title="AI Resume Analyzer",
-    page_icon="🤖",
-    layout="wide"
+    page_icon="📄",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+
+# ============================================================
+# CUSTOM STYLING
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+    .main {
+        padding-top: 1rem;
+    }
+
+    .hero {
+        padding: 2rem;
+        border-radius: 18px;
+        background: linear-gradient(
+            135deg,
+            rgba(49, 51, 63, 0.08),
+            rgba(120, 120, 120, 0.05)
+        );
+        margin-bottom: 1.5rem;
+    }
+
+    .hero h1 {
+        margin-bottom: 0.3rem;
+        font-size: 2.6rem;
+    }
+
+    .hero p {
+        font-size: 1.05rem;
+        opacity: 0.8;
+    }
+
+    .metric-card {
+        padding: 1.2rem;
+        border-radius: 15px;
+        border: 1px solid rgba(128, 128, 128, 0.25);
+        text-align: center;
+        min-height: 130px;
+    }
+
+    .metric-title {
+        font-size: 0.9rem;
+        opacity: 0.7;
+    }
+
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-top: 0.3rem;
+    }
+
+    .skill-box {
+        padding: 0.65rem 0.9rem;
+        border-radius: 10px;
+        border: 1px solid rgba(128, 128, 128, 0.25);
+        margin-bottom: 0.5rem;
+    }
+
+    .footer {
+        text-align: center;
+        opacity: 0.65;
+        padding: 2rem 0 1rem 0;
+        font-size: 0.85rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -22,52 +93,86 @@ st.set_page_config(
 # SKILL DATABASE
 # ============================================================
 
-SKILLS = [
-    "python",
-    "java",
-    "c++",
-    "javascript",
-    "typescript",
-    "sql",
-    "html",
-    "css",
-    "react",
-    "node.js",
-    "machine learning",
-    "deep learning",
-    "artificial intelligence",
-    "natural language processing",
-    "nlp",
-    "computer vision",
-    "tensorflow",
-    "pytorch",
-    "scikit-learn",
-    "pandas",
-    "numpy",
-    "opencv",
-    "matplotlib",
-    "seaborn",
-    "power bi",
-    "tableau",
-    "excel",
-    "git",
-    "github",
-    "docker",
-    "aws",
-    "azure",
-    "google cloud",
-    "fastapi",
-    "flask",
-    "streamlit",
-    "data science",
-    "data analysis",
-    "data analytics",
-    "statistics",
-    "rest api",
-    "mongodb",
-    "mysql",
-    "postgresql"
-]
+SKILL_PATTERNS = {
+    "Python": [r"\bpython\b"],
+    "Java": [r"\bjava\b"],
+    "C++": [r"\bc\+\+\b"],
+    "JavaScript": [r"\bjavascript\b"],
+    "TypeScript": [r"\btypescript\b"],
+    "SQL": [r"\bsql\b"],
+    "HTML": [r"\bhtml\b"],
+    "CSS": [r"\bcss\b"],
+
+    "React": [r"\breact\b", r"\breact\.js\b"],
+    "Node.js": [r"\bnode\.js\b", r"\bnodejs\b"],
+    "Flask": [r"\bflask\b"],
+    "FastAPI": [r"\bfastapi\b"],
+    "Streamlit": [r"\bstreamlit\b"],
+
+    "Machine Learning": [
+        r"\bmachine learning\b",
+        r"\bmachine-learning\b",
+        r"\bml\b",
+    ],
+    "Deep Learning": [
+        r"\bdeep learning\b",
+        r"\bdeep-learning\b",
+        r"\bdl\b",
+    ],
+    "Artificial Intelligence": [
+        r"\bartificial intelligence\b",
+        r"\bai\b",
+    ],
+    "NLP": [
+        r"\bnatural language processing\b",
+        r"\bnlp\b",
+    ],
+    "Computer Vision": [
+        r"\bcomputer vision\b",
+        r"\bopencv\b",
+    ],
+
+    "TensorFlow": [r"\btensorflow\b"],
+    "PyTorch": [r"\bpytorch\b"],
+    "Scikit-learn": [
+        r"\bscikit-learn\b",
+        r"\bscikit learn\b",
+        r"\bsklearn\b",
+    ],
+
+    "Pandas": [r"\bpandas\b"],
+    "NumPy": [r"\bnumpy\b", r"\bnumPy\b"],
+    "Matplotlib": [r"\bmatplotlib\b"],
+    "Seaborn": [r"\bseaborn\b"],
+
+    "Data Science": [r"\bdata science\b"],
+    "Data Analysis": [r"\bdata analysis\b"],
+    "Data Analytics": [r"\bdata analytics\b"],
+    "Statistics": [r"\bstatistics\b"],
+    "Excel": [r"\bexcel\b"],
+    "Power BI": [r"\bpower bi\b"],
+    "Tableau": [r"\btableau\b"],
+
+    "Git": [r"\bgit\b"],
+    "GitHub": [r"\bgithub\b"],
+    "Docker": [r"\bdocker\b"],
+
+    "AWS": [r"\baws\b", r"\bamazon web services\b"],
+    "Azure": [r"\bazure\b"],
+    "Google Cloud": [
+        r"\bgoogle cloud\b",
+        r"\bgcp\b",
+    ],
+
+    "REST API": [
+        r"\brest api\b",
+        r"\brestful api\b",
+        r"\brestful\b",
+    ],
+    "MongoDB": [r"\bmongodb\b"],
+    "MySQL": [r"\bmysql\b"],
+    "PostgreSQL": [r"\bpostgresql\b", r"\bpostgres\b"],
+}
 
 
 # ============================================================
@@ -75,22 +180,23 @@ SKILLS = [
 # ============================================================
 
 def extract_text_from_pdf(uploaded_file):
-    """Extract text from a PDF resume."""
+    try:
+        pdf_bytes = uploaded_file.read()
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
 
-    pdf_bytes = uploaded_file.read()
-    pdf_file = io.BytesIO(pdf_bytes)
+        pages = []
 
-    reader = PyPDF2.PdfReader(pdf_file)
+        for page in pdf_reader.pages:
+            text = page.extract_text()
 
-    text = ""
+            if text:
+                pages.append(text)
 
-    for page in reader.pages:
-        page_text = page.extract_text()
+        return "\n".join(pages)
 
-        if page_text:
-            text += page_text + "\n"
-
-    return text
+    except Exception as error:
+        st.error(f"Could not read the PDF: {error}")
+        return ""
 
 
 # ============================================================
@@ -98,18 +204,8 @@ def extract_text_from_pdf(uploaded_file):
 # ============================================================
 
 def clean_text(text):
-    """Clean text before NLP processing."""
-
     text = text.lower()
-
     text = re.sub(r"\s+", " ", text)
-
-    text = re.sub(
-        r"[^a-zA-Z0-9+#.\- ]",
-        " ",
-        text
-    )
-
     return text.strip()
 
 
@@ -118,46 +214,48 @@ def clean_text(text):
 # ============================================================
 
 def extract_skills(text):
-    """Detect technical skills from text."""
+    cleaned = clean_text(text)
+    detected = []
 
-    text = clean_text(text)
+    for skill, patterns in SKILL_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(pattern, cleaned, re.IGNORECASE):
+                detected.append(skill)
+                break
 
-    detected_skills = []
-
-    for skill in SKILLS:
-
-        pattern = r"(?<!\w)" + re.escape(skill) + r"(?!\w)"
-
-        if re.search(pattern, text):
-            detected_skills.append(skill)
-
-    return sorted(set(detected_skills))
+    return sorted(detected)
 
 
 # ============================================================
-# TF-IDF SIMILARITY
+# TEXT SIMILARITY
 # ============================================================
 
-def calculate_similarity(resume_text, job_description):
-    """Calculate similarity between resume and job description."""
+def calculate_similarity(resume_text, job_text):
+    resume_clean = clean_text(resume_text)
+    job_clean = clean_text(job_text)
 
-    documents = [
-        clean_text(resume_text),
-        clean_text(job_description)
-    ]
+    if not resume_clean or not job_clean:
+        return 0.0
 
-    vectorizer = TfidfVectorizer(
-        stop_words="english"
-    )
+    try:
+        vectorizer = TfidfVectorizer(
+            stop_words="english",
+            ngram_range=(1, 2)
+        )
 
-    matrix = vectorizer.fit_transform(documents)
+        vectors = vectorizer.fit_transform(
+            [resume_clean, job_clean]
+        )
 
-    similarity = cosine_similarity(
-        matrix[0:1],
-        matrix[1:2]
-    )[0][0]
+        similarity = cosine_similarity(
+            vectors[0:1],
+            vectors[1:2]
+        )[0][0]
 
-    return similarity * 100
+        return float(similarity * 100)
+
+    except Exception:
+        return 0.0
 
 
 # ============================================================
@@ -165,19 +263,18 @@ def calculate_similarity(resume_text, job_description):
 # ============================================================
 
 def compare_skills(resume_skills, job_skills):
-
     resume_set = set(resume_skills)
     job_set = set(job_skills)
 
-    matching_skills = sorted(
-        resume_set.intersection(job_set)
-    )
+    matching = sorted(resume_set.intersection(job_set))
+    missing = sorted(job_set - resume_set)
 
-    missing_skills = sorted(
-        job_set - resume_set
-    )
+    if job_set:
+        coverage = len(matching) / len(job_set) * 100
+    else:
+        coverage = 0.0
 
-    return matching_skills, missing_skills
+    return matching, missing, coverage
 
 
 # ============================================================
@@ -185,100 +282,103 @@ def compare_skills(resume_skills, job_skills):
 # ============================================================
 
 def generate_recommendations(
-    resume_skills,
-    job_skills,
-    matching_skills,
-    missing_skills,
-    similarity
+    similarity,
+    coverage,
+    matching,
+    missing,
+    resume_skills
 ):
-
     recommendations = []
 
-    if missing_skills:
-
-        recommendations.append(
-            "Consider adding relevant missing skills "
-            "only if you genuinely have experience with them."
-        )
-
     if similarity < 40:
-
         recommendations.append(
-            "The resume has relatively low textual similarity "
-            "to the target job description. Consider tailoring "
-            "your project and experience descriptions."
+            "Your resume has relatively low textual similarity "
+            "with the target role. Consider tailoring your project "
+            "and experience descriptions to the job description."
         )
 
-    elif similarity >= 70:
-
+    if coverage < 50 and missing:
         recommendations.append(
-            "The resume has substantial textual overlap "
-            "with the target job description."
+            "Consider adding relevant missing skills only if "
+            "you genuinely have experience with them."
         )
 
-    else:
-
+    if not matching:
         recommendations.append(
-            "The resume has moderate textual similarity "
-            "with the target job description."
+            "Very few required skills were detected in both texts. "
+            "Review the job requirements and highlight relevant "
+            "experience in your resume."
         )
 
-    if len(resume_skills) < 5:
-
+    if len(resume_skills) < 8:
         recommendations.append(
-            "Consider clearly listing your technical skills "
-            "in a dedicated Skills section."
+            "Your resume contains a limited number of detectable "
+            "technical skills. Consider clearly listing relevant "
+            "technologies used in your projects."
         )
 
-    if "github" not in resume_skills:
-
+    if matching:
         recommendations.append(
-            "Consider adding your GitHub profile if you "
-            "have relevant public projects."
+            "Keep your strongest matching skills visible in your "
+            "Summary, Skills, and Project sections."
         )
+
+    recommendations.append(
+        "Use measurable achievements where possible, such as "
+        "accuracy, performance improvements, project scale, "
+        "or time saved."
+    )
 
     return recommendations
 
 
 # ============================================================
-# HEADER
+# HERO SECTION
 # ============================================================
 
-st.title("🤖 AI Resume Analyzer")
-
-st.write(
-    "Analyze your resume against a target job description "
-    "using Natural Language Processing and Machine Learning."
+st.markdown(
+    """
+    <div class="hero">
+        <h1>📄 AI Resume Analyzer</h1>
+        <p>
+            Analyze your resume against a target job description
+            using Natural Language Processing and Machine Learning.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
-
-st.divider()
 
 
 # ============================================================
 # INPUT SECTION
 # ============================================================
 
-left_column, right_column = st.columns(2)
+left, right = st.columns(2)
 
-
-with left_column:
-
+with left:
     st.subheader("📄 Upload Resume")
 
-    uploaded_resume = st.file_uploader(
+    uploaded_file = st.file_uploader(
         "Upload your resume in PDF format",
-        type=["pdf"]
+        type=["pdf"],
+        help="Upload a text-based PDF resume.",
     )
 
+    if uploaded_file:
+        st.success(f"Uploaded: {uploaded_file.name}")
 
-with right_column:
-
+with right:
     st.subheader("🎯 Target Job Description")
 
     job_description = st.text_area(
         "Paste the job description here",
-        height=250,
-        placeholder="Paste the complete job description..."
+        placeholder=(
+            "Paste the complete job description...\n\n"
+            "Example: Python, Machine Learning, SQL, "
+            "NLP, TensorFlow..."
+        ),
+        height=220,
     )
 
 
@@ -286,248 +386,277 @@ with right_column:
 # ANALYZE BUTTON
 # ============================================================
 
+st.markdown("")
+
 analyze = st.button(
     "🚀 Analyze Resume",
-    use_container_width=True
+    type="primary",
+    use_container_width=True,
 )
 
 
+# ============================================================
+# ANALYSIS
+# ============================================================
+
 if analyze:
 
-    # --------------------------------------------------------
-    # VALIDATION
-    # --------------------------------------------------------
-
-    if uploaded_resume is None:
-
-        st.error(
-            "Please upload your resume first."
-        )
+    if not uploaded_file:
+        st.warning("Please upload a resume PDF first.")
 
     elif not job_description.strip():
-
-        st.error(
-            "Please enter a job description."
-        )
+        st.warning("Please enter a target job description.")
 
     else:
 
-        with st.spinner(
-            "Analyzing your resume..."
-        ):
+        with st.spinner("Analyzing your resume..."):
 
-            # Extract resume text
-            resume_text = extract_text_from_pdf(
-                uploaded_resume
-            )
+            resume_text = extract_text_from_pdf(uploaded_file)
 
             if not resume_text.strip():
-
                 st.error(
-                    "Could not extract text from this PDF. "
-                    "Please try a text-based PDF."
+                    "No readable text was found in the PDF. "
+                    "Please upload a text-based PDF."
                 )
-
                 st.stop()
 
-            # Extract skills
-            resume_skills = extract_skills(
-                resume_text
-            )
+            resume_skills = extract_skills(resume_text)
+            job_skills = extract_skills(job_description)
 
-            job_skills = extract_skills(
-                job_description
-            )
-
-            # Calculate similarity
             similarity = calculate_similarity(
                 resume_text,
                 job_description
             )
 
-            # Compare skills
-            matching_skills, missing_skills = compare_skills(
+            matching, missing, coverage = compare_skills(
                 resume_skills,
                 job_skills
             )
 
-            # Generate recommendations
             recommendations = generate_recommendations(
-                resume_skills,
-                job_skills,
-                matching_skills,
-                missing_skills,
-                similarity
+                similarity,
+                coverage,
+                matching,
+                missing,
+                resume_skills
             )
 
+        st.success("✅ Analysis completed successfully!")
 
-        st.success(
-            "Analysis completed successfully!"
+        st.divider()
+
+        # ====================================================
+        # METRICS
+        # ====================================================
+
+        st.header("📊 Resume Analysis")
+
+        m1, m2, m3 = st.columns(3)
+
+        with m1:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-title">
+                        Resume–Job Similarity
+                    </div>
+                    <div class="metric-value">
+                        {similarity:.1f}%
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with m2:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-title">
+                        Required Skill Coverage
+                    </div>
+                    <div class="metric-value">
+                        {coverage:.1f}%
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with m3:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-title">
+                        Skills Detected
+                    </div>
+                    <div class="metric-value">
+                        {len(resume_skills)}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("")
+
+        # Progress indicators
+
+        st.write("**Resume–Job Similarity**")
+        st.progress(
+            min(max(similarity / 100, 0.0), 1.0)
+        )
+
+        st.write("**Required Skill Coverage**")
+        st.progress(
+            min(max(coverage / 100, 0.0), 1.0)
         )
 
         st.divider()
 
-
         # ====================================================
-        # SCORE SECTION
-        # ====================================================
-
-        st.subheader("📊 Resume Analysis")
-
-
-        score_column, skill_column = st.columns(2)
-
-
-        with score_column:
-
-            st.metric(
-                "Resume–Job Text Similarity",
-                f"{similarity:.1f}%"
-            )
-
-            st.progress(
-                min(int(similarity), 100)
-            )
-
-
-        with skill_column:
-
-            if job_skills:
-
-                skill_match_percentage = (
-                    len(matching_skills)
-                    / len(job_skills)
-                ) * 100
-
-            else:
-
-                skill_match_percentage = 0
-
-
-            st.metric(
-                "Required Skill Coverage",
-                f"{skill_match_percentage:.1f}%"
-            )
-
-            st.progress(
-                min(
-                    int(skill_match_percentage),
-                    100
-                )
-            )
-
-
-        st.divider()
-
-
-        # ====================================================
-        # MATCHING / MISSING SKILLS
+        # SKILL COMPARISON
         # ====================================================
 
-        matching_column, missing_column = st.columns(2)
+        st.header("🎯 Skill Match")
 
+        skill_left, skill_right = st.columns(2)
 
-        with matching_column:
+        with skill_left:
+            st.subheader("✅ Matching Skills")
 
-            st.subheader(
-                "✅ Matching Skills"
-            )
-
-            if matching_skills:
-
-                for skill in matching_skills:
-
-                    st.write(
-                        f"✅ {skill.title()}"
+            if matching:
+                for skill in matching:
+                    st.markdown(
+                        f'<div class="skill-box">✅ {skill}</div>',
+                        unsafe_allow_html=True,
                     )
-
             else:
-
                 st.info(
                     "No matching skills were detected."
                 )
 
+        with skill_right:
+            st.subheader("❌ Missing / Undetected Skills")
 
-        with missing_column:
-
-            st.subheader(
-                "❌ Missing / Undetected Skills"
-            )
-
-            if missing_skills:
-
-                for skill in missing_skills:
-
-                    st.write(
-                        f"❌ {skill.title()}"
+            if missing:
+                for skill in missing:
+                    st.markdown(
+                        f'<div class="skill-box">❌ {skill}</div>',
+                        unsafe_allow_html=True,
                     )
-
             else:
-
                 st.success(
-                    "No missing skills were detected "
-                    "from the current skill database."
+                    "All detected job skills are present!"
                 )
-
 
         st.divider()
 
-
         # ====================================================
-        # DETECTED RESUME SKILLS
+        # SKILLS DETECTED
         # ====================================================
 
-        st.subheader(
-            "🧠 Skills Detected in Your Resume"
-        )
-
+        st.header("🧠 Skills Detected in Your Resume")
 
         if resume_skills:
 
-            st.write(
-                ", ".join(
-                    skill.title()
-                    for skill in resume_skills
-                )
-            )
+            skill_columns = st.columns(3)
+
+            for index, skill in enumerate(resume_skills):
+                with skill_columns[index % 3]:
+                    st.markdown(
+                        f'<div class="skill-box">🔹 {skill}</div>',
+                        unsafe_allow_html=True,
+                    )
 
         else:
-
             st.info(
                 "No skills from the current skill database "
                 "were detected."
             )
 
+        # ====================================================
+        # SKILL CHART
+        # ====================================================
 
-        st.divider()
+        if matching or missing:
 
+            st.divider()
+
+            st.header("📈 Skill Coverage Overview")
+
+            chart_data = {
+                "Category": [
+                    "Matching Skills",
+                    "Missing Skills"
+                ],
+                "Count": [
+                    len(matching),
+                    len(missing)
+                ],
+            }
+
+            st.bar_chart(
+                chart_data,
+                x="Category",
+                y="Count",
+            )
 
         # ====================================================
         # RECOMMENDATIONS
         # ====================================================
 
-        st.subheader(
-            "💡 Recommendations"
-        )
+        st.divider()
 
+        st.header("💡 Recommendations")
 
         for recommendation in recommendations:
-
-            st.write(
+            st.markdown(
                 f"• {recommendation}"
             )
 
+        # ====================================================
+        # TEXT PREVIEW
+        # ====================================================
 
         st.divider()
 
+        with st.expander("🔍 View extracted resume text"):
+
+            preview = resume_text[:5000]
+
+            st.text(
+                preview
+                + (
+                    "\n\n[Preview truncated...]"
+                    if len(resume_text) > 5000
+                    else ""
+                )
+            )
 
         # ====================================================
         # DISCLAIMER
         # ====================================================
 
-        st.caption(
-            "Note: This tool provides text similarity and "
-            "skill-matching analysis. It is not a hiring "
-            "decision system and does not guarantee job "
-            "eligibility or interview selection."
+        st.info(
+            "ℹ️ This tool is intended for resume improvement "
+            "and educational purposes. It is not a hiring "
+            "decision system and should not be used as the sole "
+            "basis for employment decisions."
         )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="footer">
+        Built with Python • Streamlit • NLP • Machine Learning
+        <br>
+        AI Resume Analyzer
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
